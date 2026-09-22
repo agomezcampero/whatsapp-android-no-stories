@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- WhatsApp's light top bar. Tweak here if it ever stops matching. -->
+    <color name="story_row_cover">#FFFFFFFF</color>
+    <color name="ic_launcher_background">#FF2E3B41</color>
+</resources>

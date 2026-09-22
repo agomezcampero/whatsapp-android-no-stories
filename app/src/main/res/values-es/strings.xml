@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sin Estados</string>
+    <string name="service_label">Sin Estados</string>
+    <string name="service_description">Tapa la fila de estados en la parte superior de la pantalla de Chats de WhatsApp. Lee el contenido de la pantalla de WhatsApp para encontrar esa fila; no guarda ni envía nada.</string>
+    <string name="intro">Oculta la fila de estados en la parte superior de la pantalla de Chats de WhatsApp. La pestaña Novedades sigue funcionando.</string>
+    <string name="setup">Activá el servicio de accesibilidad Sin Estados. En Android 13 o superior, primero permití los ajustes restringidos: Ajustes &#8594; Apps &#8594; Sin Estados &#8594; ⋮ &#8594; Permitir ajustes restringidos.</string>
+    <string name="status_on">El servicio está activo.</string>
+    <string name="status_off">El servicio está desactivado.</string>
+    <string name="open_settings">Abrir ajustes de Accesibilidad</string>
+</resources>

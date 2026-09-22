@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    packageNames is deliberately NOT set here.
+
+    Filtering by package in the manifest would also filter out the
+    typeWindowStateChanged event that fires when WhatsApp leaves the
+    foreground, and the overlay would stay on screen on top of whatever
+    app comes next. Instead StoryHiderService drops foreign events with a
+    single string comparison before doing any work - see
+    StoryHiderService.onAccessibilityEvent.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/service_description"
+    android:notificationTimeout="100"
+    android:settingsActivity="com.gomezcampero.nostories.MainActivity" />

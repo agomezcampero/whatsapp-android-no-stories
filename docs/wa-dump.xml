@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Placeholder. Replace this file with the real snippet from a device.
+
+    adb shell uiautomator dump /sdcard/wa.xml && adb pull /sdcard/wa.xml
+
+  with WhatsApp open on the Chats tab. In wa.xml, find the element just above
+  the "Ask Meta AI or Search" bar that holds the avatar circles - it usually has
+  a child with content-desc "Your status" / "Tu estado". Paste that element and
+  its children below, then:
+
+    - if it has a resource-id, add it to StatusRowLocator.ROW_VIEW_IDS (first in
+      the list) so the lookup is a single call instead of a tree scan;
+    - if it has no resource-id, check that one of its children's content-desc
+      values is covered by StatusRowLocator.ROW_LABELS, and that the row's
+      bounds fit the shape checks in StatusRowLocator.isRow.
+
+  Everything the app matches on lives in StatusRowLocator.kt. Nothing else
+  should need to change.
+-->
+<hierarchy rotation="0">
+  <!-- paste the status row element here -->
+</hierarchy>
