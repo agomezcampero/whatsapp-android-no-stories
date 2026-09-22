@@ -38,11 +38,8 @@ circles, put it in `docs/wa-dump.xml`, and add its `resource-id` to the front of
 skips the tree scan entirely. If it has no `resource-id`, match on its
 `content-desc` instead by extending `ROW_LABELS`.
 
-While tuning, watch what the service sees:
-
-```sh
-adb shell uiautomator dump /sdcard/wa.xml   # after each WhatsApp update
-```
+Re-dump after a WhatsApp update if the cover ever stops appearing: that is
+almost always the row's attributes having changed.
 
 ## Building and installing
 
@@ -95,5 +92,6 @@ while another app is on top doesn't bring the overlay back.
 * The cover colour is two constants (`story_row_cover` in `values/colors.xml`
   and `values-night/colors.xml`). If WhatsApp restyles its top bar, change them
   there.
-* Not verified on a device yet: it compiles and installs, but the id candidates
-  and the exact cover colours need one pass with a real dump.
+* Not verified on a device yet. It compiles and packages, but the id
+  candidates, the label list and the exact cover colours all want one pass
+  against a real WhatsApp before they can be trusted.
