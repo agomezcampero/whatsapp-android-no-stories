@@ -17,29 +17,49 @@ and is removed when the row is gone or WhatsApp leaves the foreground.
 
 | File | Responsibility |
 | --- | --- |
-| `StatusRowLocator.kt` | **All** matching logic: view ids, labels, row shape |
+| `StatusRowLocator.kt` | **All** matching logic: shape, labels, id lookup |
+| `RowIdMemory.kt` | Remembers the row's view id once something has found it |
 | `OverlayController.kt` | The overlay window: add, move, repaint, remove |
 | `StoryHiderService.kt` | Event filtering, node caching, when to show and hide |
 | `MainActivity.kt` | A button that opens Accessibility settings |
 
-## Finding the node
+## Finding the row
 
-The row's attributes are not confirmed yet, so `StatusRowLocator` ships with
-unverified id candidates plus a label-based fallback that does the real work.
-To pin it down, with WhatsApp open on Chats:
+No view ids ship with the app. It works the row out on first run and then
+remembers what it found, so it calibrates itself against whatever WhatsApp
+build is on the phone.
+
+**1. The learned id.** Whatever finds the row, its `viewIdResourceName` goes
+into `SharedPreferences` (`RowIdMemory`). Every run after that resolves it in a
+single call with no tree walk. If a WhatsApp update renames the row the id
+stops resolving, step 2 finds it again, and the new id replaces the old one.
+
+**2. Shape.** The row is identified by what it *is*, not by what it says: a
+strip in the top band of the screen, much wider than it is tall, whose children
+are tile-shaped, level with each other, about equally wide, laid out side by
+side without overlapping, and tappable. A horizontally scrollable container
+scores highest. No text is involved, so this holds in any language and survives
+WhatsApp rewording its labels. Only nodes starting inside the top band are
+walked at all, which skips the chat list entirely.
+
+**3. Labels.** Last resort: an avatar described as "Your status" / "Tu estado",
+then a climb to the row holding it. Its real job is the case where the row is
+down to a single tile, which step 2 deliberately will not match.
+
+To see what it picked:
+
+```sh
+adb logcat -s NoStories
+```
+
+A dump is still the fastest way to understand a layout that defeats all three:
 
 ```sh
 adb shell uiautomator dump /sdcard/wa.xml && adb pull /sdcard/wa.xml
 ```
 
-Find the element above the "Ask Meta AI or Search" bar that holds the avatar
-circles, put it in `docs/wa-dump.xml`, and add its `resource-id` to the front of
-`StatusRowLocator.ROW_VIEW_IDS`. That turns the lookup into a single call and
-skips the tree scan entirely. If it has no `resource-id`, match on its
-`content-desc` instead by extending `ROW_LABELS`.
-
-Re-dump after a WhatsApp update if the cover ever stops appearing: that is
-almost always the row's attributes having changed.
+Put the element above the "Ask Meta AI or Search" bar into `docs/wa-dump.xml`
+and adjust the constants at the top of `StatusRowLocator` against it.
 
 ## Building and installing
 
@@ -67,8 +87,10 @@ Sideload only. This is not for the Play Store.
 * Foreign events are dropped after one string comparison.
 * The found row is cached as an `AccessibilityNodeInfo` and re-read with
   `refresh()`, so the common case never walks the tree.
-* The fallback scan is breadth-first, capped at 800 nodes, and throttled to one
-  run per 350 ms.
+* After the first sighting the row resolves by its learned id: one call, no
+  walk.
+* The scans are breadth-first, capped at 800 nodes, throttled to one run per
+  350 ms, and never descend below the top band of the screen.
 * The overlay window is only moved when its bounds actually change.
 * No polling, no wake locks, no dependencies beyond the platform and Kotlin.
 
@@ -92,6 +114,7 @@ while another app is on top doesn't bring the overlay back.
 * The cover colour is two constants (`story_row_cover` in `values/colors.xml`
   and `values-night/colors.xml`). If WhatsApp restyles its top bar, change them
   there.
-* Not verified on a device yet. It compiles and packages, but the id
-  candidates, the label list and the exact cover colours all want one pass
-  against a real WhatsApp before they can be trusted.
+* The shape constants at the top of `StatusRowLocator` were tuned by
+  reasoning, not against a measured layout. If the cover comes out the wrong
+  size, they are what to adjust.
+* The cover colours are a guess at WhatsApp's top bar and may want a nudge.

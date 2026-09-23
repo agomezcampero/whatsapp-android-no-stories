@@ -38,6 +38,7 @@ class StoryHiderService : AccessibilityService() {
     }
 
     private var overlay: OverlayController? = null
+    private var memory: RowIdMemory? = null
 
     /** The row we found last time, re-read with refresh() instead of a walk. */
     private var cachedRow: AccessibilityNodeInfo? = null
@@ -47,6 +48,7 @@ class StoryHiderService : AccessibilityService() {
 
     override fun onServiceConnected() {
         overlay = OverlayController(this)
+        memory = RowIdMemory(this)
         cachedRow = null
         screen = displayBounds()
     }
@@ -96,23 +98,33 @@ class StoryHiderService : AccessibilityService() {
             cachedRow = null
         }
 
-        StatusRowLocator.findById(root, screen)?.let { return remember(it) }
+        // The id we learned last time: one call, and the usual case.
+        memory?.learned()?.let { id ->
+            StatusRowLocator.findByViewId(root, id, screen)?.let { return keep(it) }
+        }
 
-        // The id lookup missing tells us nothing while the ids are unconfirmed,
-        // so without a scan we have no answer - say so rather than hiding.
+        // Missing the id tells us nothing on its own - the row may simply have
+        // been renamed - so without a scan we have no answer, and saying
+        // "gone" here is what used to make the cover blink.
         if (!deepScanAllowed) return Lookup.Unknown
 
         lastDeepScanAt = System.currentTimeMillis()
-        val row = StatusRowLocator.findByLabel(root, screen) ?: return Lookup.Gone
-        return remember(row)
+
+        val row = StatusRowLocator.findByStructure(root, screen)
+            ?: StatusRowLocator.findByLabel(root, screen)
+            ?: return Lookup.Gone
+
+        return keep(row)
     }
 
-    private fun remember(row: AccessibilityNodeInfo): Lookup.Found {
+    private fun keep(row: AccessibilityNodeInfo): Lookup.Found {
         cachedRow = row
-        val bounds = StatusRowLocator.boundsOf(row)
-        // Surfaces the attributes to put in ROW_VIEW_IDS: adb logcat -s NoStories
-        Log.d(TAG, "status row id=${row.viewIdResourceName} class=${row.className} bounds=$bounds")
-        return Lookup.Found(bounds)
+        val id = row.viewIdResourceName
+        if (memory?.learn(id) == true) {
+            // Also handy from the outside: adb logcat -s NoStories
+            Log.d(TAG, "learned status row id=$id class=${row.className}")
+        }
+        return Lookup.Found(StatusRowLocator.boundsOf(row))
     }
 
     private fun forgetRow() {
