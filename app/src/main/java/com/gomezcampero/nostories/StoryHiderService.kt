@@ -34,7 +34,7 @@ class StoryHiderService : AccessibilityService() {
          * not enough, and if nothing else moves on screen there is no other
          * event to ride on.
          */
-        val SETTLE_DELAYS_MS = longArrayOf(200L, 700L, 1500L)
+        val SETTLE_DELAYS_MS = longArrayOf(200L, 600L, 1200L, 2500L)
 
         /** How often a working cover re-describes itself for the report. */
         const val COVER_REPORT_INTERVAL_MS = 1000L
@@ -154,18 +154,17 @@ class StoryHiderService : AccessibilityService() {
     }
 
     private fun lookUpRow(root: AccessibilityNodeInfo, deepScanAllowed: Boolean): Lookup {
+        // The fast path: the row we covered last time, re-read rather than
+        // looked up. Anything other than a clean hit falls through to the id
+        // lookup below rather than concluding anything - the cached node
+        // reads as invisible while a chat closes over it, and taking that
+        // for an answer hid the cover the moment it came back.
         cachedRow?.let { row ->
-            if (row.refresh()) {
-                val bounds = StatusRowLocator.boundsOf(row)
-                if (row.isVisibleToUser && StatusRowLocator.isPlausible(bounds, screen)) {
-                    return found(row, root)
-                }
-                // The node is still there and we have just read its current
-                // bounds: it is not showing a row now. That is an answer, not
-                // a shrug. Answering Unknown here is what left the cover
-                // parked over the toolbar once the row scrolled up behind it.
-                cachedRow = null
-                return Lookup.Gone
+            if (row.refresh() &&
+                row.isVisibleToUser &&
+                StatusRowLocator.isPlausible(StatusRowLocator.boundsOf(row), screen)
+            ) {
+                return found(row, root)
             }
             cachedRow = null
         }
@@ -179,9 +178,9 @@ class StoryHiderService : AccessibilityService() {
             return found(it, root)
         }
 
-        // Missing the id tells us nothing on its own - the row may simply have
-        // been renamed - so without a scan we have no answer, and saying
-        // "gone" here is what used to make the cover blink.
+        // The id not resolving right now is not the same as the row being
+        // gone, and this is the throttled path, so we have not looked
+        // properly. Saying "gone" here is what used to make the cover blink.
         if (!deepScanAllowed) return Lookup.Unknown
 
         if (StatusRowLocator.looksLikeChatsScreen(root)) reportWhatIsOnScreen(root)
