@@ -171,17 +171,22 @@ class StoryHiderService : AccessibilityService() {
         // A confirmed id, if this build of WhatsApp still answers to one.
         StatusRowLocator.findBySeedId(root, screen)?.let { return keep(it, confirmed = true) }
 
-        // Otherwise the id we learned last time: one call, and the usual case.
+        // Missing the id tells us nothing on its own - the row may simply have
+        // been renamed - so without a scan we have no answer, and saying
+        // "gone" here is what used to make the cover blink.
+        if (!deepScanAllowed) return Lookup.Unknown
+
+        // Only the Chats screen is safe to guess on. Elsewhere in WhatsApp
+        // the shape pass will match a selection toolbar or a picker strip,
+        // and cover buttons you need. A learned id is a guess too - it came
+        // from these same passes - so it waits behind this as well.
+        if (!StatusRowLocator.looksLikeChatsScreen(root)) return Lookup.Gone
+
         memory?.learned()?.let { id ->
             StatusRowLocator.findByViewId(root, id, screen)?.let {
                 return keep(it, confirmed = true)
             }
         }
-
-        // Missing the id tells us nothing on its own - the row may simply have
-        // been renamed - so without a scan we have no answer, and saying
-        // "gone" here is what used to make the cover blink.
-        if (!deepScanAllowed) return Lookup.Unknown
 
         lastDeepScanAt = System.currentTimeMillis()
 

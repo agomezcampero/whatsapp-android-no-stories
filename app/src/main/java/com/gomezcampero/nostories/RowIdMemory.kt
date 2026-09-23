@@ -16,9 +16,26 @@ class RowIdMemory(context: Context) {
     private companion object {
         const val FILE = "status-row"
         const val KEY = "view_id"
+        const val LEARNED_UNDER = "learned_under"
+
+        /**
+         * Bumped whenever detection changes in a way that could have taught
+         * the app the wrong node. An id learned under an older rule is
+         * dropped rather than carried forward, because a remembered id is
+         * used ahead of everything else and a wrong one is invisible and
+         * permanent. Version 2 stopped guessing outside the Chats screen,
+         * where a selection toolbar could be learned as the row.
+         */
+        const val RULES_VERSION = 2
     }
 
     private val store = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+    init {
+        if (store.getInt(LEARNED_UNDER, 0) != RULES_VERSION) {
+            store.edit().remove(KEY).putInt(LEARNED_UNDER, RULES_VERSION).apply()
+        }
+    }
 
     /** The id learned on this device, or null before anything has been found. */
     fun learned(): String? = store.getString(KEY, null)

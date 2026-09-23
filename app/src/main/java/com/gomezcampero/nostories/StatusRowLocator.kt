@@ -112,7 +112,27 @@ object StatusRowLocator {
         "com.whatsapp:id/status_list",
     )
 
+    /**
+     * Ids that only turn up on the Chats screen. The shape and label passes
+     * are only allowed to run when one of these is present.
+     *
+     * Without that, they will happily match things elsewhere in WhatsApp
+     * that are also strips of evenly sized, level, tappable tiles - the
+     * toolbar that appears when you select a message, for one, which put the
+     * cover over the copy and delete buttons. Covering the wrong thing is
+     * worse than covering nothing, so this fails closed: if WhatsApp renames
+     * these, the passes stop running rather than start guessing.
+     */
+    private val CHATS_SCREEN_IDS = listOf(
+        "com.whatsapp:id/my_search_bar",
+        "com.whatsapp:id/conversations_coordinator_layout",
+    )
+
     private val ACCENTS = "\\p{Mn}+".toRegex()
+
+    /** Whether the screen on show is the chat list, rather than a chat. */
+    fun looksLikeChatsScreen(root: AccessibilityNodeInfo): Boolean =
+        CHATS_SCREEN_IDS.any { root.findAccessibilityNodeInfosByViewId(it).isNotEmpty() }
 
     /** Resolves whichever shipped id this WhatsApp build still answers to. */
     fun findBySeedId(root: AccessibilityNodeInfo, screen: Rect): AccessibilityNodeInfo? =
@@ -282,6 +302,9 @@ object StatusRowLocator {
         if (!level(tiles)) return verdict(false, "tiles not level")
         if (!evenlyWide(tiles)) return verdict(false, "tiles unevenly wide")
         if (!sideBySide(tiles)) return verdict(false, "tiles not side by side")
+        // The row of stories scrolls sideways. A toolbar of icons does not,
+        // and is otherwise indistinguishable from it.
+        if (!node.isScrollable) return verdict(false, "not scrollable")
         return verdict(true, "accepted")
     }
 
