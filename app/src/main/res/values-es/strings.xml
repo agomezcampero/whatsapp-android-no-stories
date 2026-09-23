@@ -8,11 +8,9 @@
     <string name="status_on">El servicio está activo.</string>
     <string name="status_off">El servicio está desactivado.</string>
     <string name="open_settings">Abrir ajustes de Accesibilidad</string>
-    <string name="debug_hint">Si la tapa queda en el lugar equivocado: abrí WhatsApp en Chats, volvé acá y compartí el informe. Olvidar la fila hace que el servicio la busque de nuevo desde cero.</string>
+    <string name="debug_hint">Si los estados dejan de taparse: abrí WhatsApp en Chats, volvé acá y compartí el informe. Ahí figura cómo se ve la fila ahora.</string>
     <string name="see_through">Tapa transparente</string>
     <string name="share_report">Compartir informe de detección</string>
-    <string name="forget_row">Olvidar la fila aprendida</string>
     <string name="report_subject">Informe de detección de Sin Estados</string>
     <string name="no_report">Todavía no hay informe. Abrí WhatsApp en la pestaña Chats primero.</string>
-    <string name="forgotten">Olvidada. Abrí WhatsApp para detectarla de nuevo.</string>
 </resources>

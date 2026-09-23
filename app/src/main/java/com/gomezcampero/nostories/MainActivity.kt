@@ -11,9 +11,9 @@ import android.widget.TextView
 import android.widget.Toast
 
 /**
- * A button to open Accessibility settings, plus two for working out why the
- * cover landed where it did: share the last detection report, and forget the
- * row id the service learned so it works the row out again from scratch.
+ * A button to open Accessibility settings, plus two for working out where the
+ * cover landed: share the last detection report, and paint the cover
+ * see-through.
  */
 class MainActivity : Activity() {
 
@@ -34,7 +34,6 @@ class MainActivity : Activity() {
             isChecked = options.seeThrough
             setOnCheckedChangeListener { _, checked -> options.seeThrough = checked }
         }
-        findViewById<Button>(R.id.forget_row).setOnClickListener { forgetRow() }
     }
 
     override fun onResume() {
@@ -55,15 +54,6 @@ class MainActivity : Activity() {
             putExtra(Intent.EXTRA_TEXT, report)
         }
         startActivity(Intent.createChooser(send, getString(R.string.share_report)))
-    }
-
-    /**
-     * Drops the learned id. The service keeps using a remembered id even when
-     * it turns out to be the wrong node, so this is the way back out.
-     */
-    private fun forgetRow() {
-        RowIdMemory(this).forget()
-        toast(R.string.forgotten)
     }
 
     private fun toast(message: Int) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()

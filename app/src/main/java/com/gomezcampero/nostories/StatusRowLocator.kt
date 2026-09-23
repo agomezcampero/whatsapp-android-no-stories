@@ -123,12 +123,46 @@ object StatusRowLocator {
      * worse than covering nothing, so this fails closed: if WhatsApp renames
      * these, the passes stop running rather than start guessing.
      */
+    private const val SEARCH_BAR_ID = "com.whatsapp:id/my_search_bar"
+
     private val CHATS_SCREEN_IDS = listOf(
-        "com.whatsapp:id/my_search_bar",
+        SEARCH_BAR_ID,
         "com.whatsapp:id/conversations_coordinator_layout",
     )
 
     private val ACCENTS = "\\p{Mn}+".toRegex()
+
+    /**
+     * The area actually worth covering: the tiles, not the view holding them.
+     *
+     * When the header collapses, the row keeps its full-width layout while
+     * its contents shrink to a cluster of circles, so covering the view
+     * itself takes the search bar and the overflow menu with it. The visible
+     * tiles are where the faces are, expanded or collapsed.
+     *
+     * As a backstop the cover is kept clear of the search bar, whose position
+     * we can ask for directly.
+     */
+    fun coverBounds(row: AccessibilityNodeInfo, root: AccessibilityNodeInfo): Rect {
+        val tiles = Rect()
+        for (i in 0 until row.childCount) {
+            val child = row.getChild(i) ?: continue
+            if (!child.isVisibleToUser) continue
+            val bounds = boundsOf(child)
+            if (bounds.isEmpty) continue
+            if (tiles.isEmpty) tiles.set(bounds) else tiles.union(bounds)
+        }
+
+        val cover = if (tiles.isEmpty) boundsOf(row) else tiles
+
+        val searchBarTop = root.findAccessibilityNodeInfosByViewId(SEARCH_BAR_ID)
+            .firstOrNull()
+            ?.let { boundsOf(it).top }
+        if (searchBarTop != null && searchBarTop > cover.top && cover.bottom > searchBarTop) {
+            cover.bottom = searchBarTop
+        }
+        return cover
+    }
 
     /** Whether the screen on show is the chat list, rather than a chat. */
     fun looksLikeChatsScreen(root: AccessibilityNodeInfo): Boolean =

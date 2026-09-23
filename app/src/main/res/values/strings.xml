@@ -10,11 +10,9 @@
     <string name="status_on">Service is on.</string>
     <string name="status_off">Service is off.</string>
     <string name="open_settings">Open Accessibility settings</string>
-    <string name="debug_hint">If the cover lands in the wrong place: open WhatsApp on Chats, come back here, and share the report. Forgetting the row makes the service work it out again from scratch.</string>
+    <string name="debug_hint">If the stories stop being covered: open WhatsApp on Chats, come back here, and share the report. It names what the row looks like now.</string>
     <string name="see_through">See-through cover</string>
     <string name="share_report">Share detection report</string>
-    <string name="forget_row">Forget learned row</string>
     <string name="report_subject">No Stories detection report</string>
     <string name="no_report">No report yet. Open WhatsApp on the Chats tab first.</string>
-    <string name="forgotten">Forgotten. Open WhatsApp to detect it again.</string>
 </resources>

@@ -31,22 +31,20 @@ avatar tiles on the Chats tab, confirmed from a detection report. Not
 obfuscates and reshuffles ids, so expect this to lapse on an update; the
 passes below carry on until a new id is added to `ROW_VIEW_IDS`.
 
-**2. The learned id.** Whatever finds the row, its `viewIdResourceName` goes
-into `SharedPreferences` (`RowIdMemory`). Every run after that resolves it in a
-single call with no tree walk. If a WhatsApp update renames the row the id
-stops resolving, step 2 finds it again, and the new id replaces the old one.
+**The row is only ever resolved by id.** Nothing is covered on the strength of
+a guess. Shape rules could not tell the row from the toolbar that appears when
+you select a message, and the cost of being wrong is covering a button you
+need, so they no longer decide anything.
 
-**3. Shape.** The row is identified by what it *is*, not by what it says: a
-strip in the top band of the screen, much wider than it is tall, whose children
-are tile-shaped, level with each other, about equally wide, laid out side by
-side without overlapping, and tappable. A horizontally scrollable container
-scores highest. No text is involved, so this holds in any language and survives
-WhatsApp rewording its labels. Only nodes starting inside the top band are
-walked at all, which skips the chat list entirely.
+**What gets covered is the tiles, not the row.** When the header collapses, the
+row keeps its full-width layout while its contents shrink to a cluster of
+circles - covering the view itself takes the search bar and the overflow menu
+with it. The cover is the union of the visible tiles, kept clear of the search
+bar as a backstop.
 
-**4. Labels.** Last resort: an avatar described as "Your status" / "Tu estado",
-then a climb to the row holding it. Its real job is the case where the row is
-down to a single tile, which step 2 deliberately will not match.
+**When no known id resolves**, and only on the Chats screen, the shape and
+label passes still run, but purely to write a report naming the likeliest
+candidate. That name goes into `ROW_VIEW_IDS` and detection works again.
 
 To see what it picked:
 

@@ -51,9 +51,4 @@
         android:layout_marginTop="8dp"
         android:text="@string/share_report" />
 
-    <Button
-        android:id="@+id/forget_row"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/forget_row" />
 </LinearLayout>

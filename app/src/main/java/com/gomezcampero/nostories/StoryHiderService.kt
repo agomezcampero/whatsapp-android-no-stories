@@ -50,13 +50,10 @@ class StoryHiderService : AccessibilityService() {
     }
 
     private var overlay: OverlayController? = null
-    private var memory: RowIdMemory? = null
 
     /** The row we found last time, re-read with refresh() instead of a walk. */
     private var cachedRow: AccessibilityNodeInfo? = null
 
-    /** Whether that row came from a known id rather than from its shape. */
-    private var cachedRowConfirmed = false
     private var lastDeepScanAt = 0L
 
     private val handler = Handler(Looper.getMainLooper())
@@ -67,7 +64,6 @@ class StoryHiderService : AccessibilityService() {
 
     override fun onServiceConnected() {
         overlay = OverlayController(this)
-        memory = RowIdMemory(this)
         cachedRow = null
         screen = displayBounds()
     }
@@ -155,8 +151,8 @@ class StoryHiderService : AccessibilityService() {
         cachedRow?.let { row ->
             if (row.refresh()) {
                 val bounds = StatusRowLocator.boundsOf(row)
-                if (row.isVisibleToUser && stillTheRow(bounds)) {
-                    return Lookup.Found(bounds)
+                if (row.isVisibleToUser && StatusRowLocator.isPlausible(bounds, screen)) {
+                    return Lookup.Found(StatusRowLocator.coverBounds(row, root))
                 }
                 // The node is still there and we have just read its current
                 // bounds: it is not showing a row now. That is an answer, not
@@ -168,26 +164,27 @@ class StoryHiderService : AccessibilityService() {
             cachedRow = null
         }
 
-        // A confirmed id, if this build of WhatsApp still answers to one.
-        StatusRowLocator.findBySeedId(root, screen)?.let { return keep(it, confirmed = true) }
+        // The row is only ever resolved by a known id. The shape and label
+        // passes below no longer decide what to cover - they had no way to
+        // tell the row from a toolbar of icons, and the cost of being wrong
+        // is covering a button you need. They diagnose instead.
+        StatusRowLocator.findBySeedId(root, screen)?.let { return keep(it, root) }
 
         // Missing the id tells us nothing on its own - the row may simply have
         // been renamed - so without a scan we have no answer, and saying
         // "gone" here is what used to make the cover blink.
         if (!deepScanAllowed) return Lookup.Unknown
 
-        // Only the Chats screen is safe to guess on. Elsewhere in WhatsApp
-        // the shape pass will match a selection toolbar or a picker strip,
-        // and cover buttons you need. A learned id is a guess too - it came
-        // from these same passes - so it waits behind this as well.
-        if (!StatusRowLocator.looksLikeChatsScreen(root)) return Lookup.Gone
+        if (StatusRowLocator.looksLikeChatsScreen(root)) reportWhatIsOnScreen(root)
+        return Lookup.Gone
+    }
 
-        memory?.learned()?.let { id ->
-            StatusRowLocator.findByViewId(root, id, screen)?.let {
-                return keep(it, confirmed = true)
-            }
-        }
-
+    /**
+     * Records what the Chats screen looks like when no known id resolved,
+     * which is how a renamed row gets found again. Nothing here covers
+     * anything: it names a candidate, and that name goes in ROW_VIEW_IDS.
+     */
+    private fun reportWhatIsOnScreen(root: AccessibilityNodeInfo) {
         lastDeepScanAt = System.currentTimeMillis()
 
         val candidates = mutableListOf<String>()
@@ -201,44 +198,24 @@ class StoryHiderService : AccessibilityService() {
             context = this,
             header = listOf(
                 "screen=$screen",
-                "learned id=${memory?.learned() ?: "none"}",
-                "chosen=${row?.viewIdResourceName ?: "nothing"} " +
+                "no known id resolved - nothing was covered",
+                "best guess=${row?.viewIdResourceName ?: "nothing"} " +
                     "bounds=${row?.let(StatusRowLocator::boundsOf) ?: "-"}",
-                "found by=${if (row == null) "-" else foundBy}",
+                "guessed by=${if (row == null) "-" else foundBy}",
             ),
             candidates = candidates,
             others = others,
         )
-
-        return if (row == null) Lookup.Gone else keep(row, confirmed = false)
+        Log.d(TAG, "no known status row id on screen; best guess ${row?.viewIdResourceName}")
     }
 
-    /**
-     * A row found by id stays the row even when it collapses to a cluster of
-     * circles; one found by its shape is only the row while it still has that
-     * shape, since the shape is all we had to go on.
-     */
-    private fun stillTheRow(bounds: Rect): Boolean =
-        if (cachedRowConfirmed) {
-            StatusRowLocator.isPlausible(bounds, screen)
-        } else {
-            StatusRowLocator.isRow(bounds, screen)
-        }
-
-    private fun keep(row: AccessibilityNodeInfo, confirmed: Boolean): Lookup.Found {
+    private fun keep(row: AccessibilityNodeInfo, root: AccessibilityNodeInfo): Lookup.Found {
         cachedRow = row
-        cachedRowConfirmed = confirmed
-        val id = row.viewIdResourceName
-        if (memory?.learn(id) == true) {
-            // Also handy from the outside: adb logcat -s NoStories
-            Log.d(TAG, "learned status row id=$id class=${row.className}")
-        }
-        return Lookup.Found(StatusRowLocator.boundsOf(row))
+        return Lookup.Found(StatusRowLocator.coverBounds(row, root))
     }
 
     private fun forgetRow() {
         cachedRow = null
-        cachedRowConfirmed = false
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
