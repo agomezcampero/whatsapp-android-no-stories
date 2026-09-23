@@ -164,6 +164,19 @@ object StatusRowLocator {
         return cover
     }
 
+    /** One line per child of the row, for a report of a working cover. */
+    fun describeTiles(row: AccessibilityNodeInfo): List<String> =
+        (0 until row.childCount).map { i ->
+            val child = row.getChild(i)
+            if (child == null) {
+                "tile $i = null"
+            } else {
+                "tile $i id=${child.viewIdResourceName} class=${child.className} " +
+                    "bounds=${boundsOf(child)} visible=${child.isVisibleToUser} " +
+                    "text=${child.contentDescription ?: child.text ?: ""}"
+            }
+        }
+
     /** Whether the screen on show is the chat list, rather than a chat. */
     fun looksLikeChatsScreen(root: AccessibilityNodeInfo): Boolean =
         CHATS_SCREEN_IDS.any { root.findAccessibilityNodeInfosByViewId(it).isNotEmpty() }

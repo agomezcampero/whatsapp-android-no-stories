@@ -47,7 +47,7 @@ object Diagnostics {
             appendLine()
             header.forEach(::appendLine)
             appendLine()
-            appendLine("ROW SHAPED (reached the tile checks)")
+            appendLine(if (others.isEmpty()) "TILES" else "ROW SHAPED (reached the tile checks)")
             if (candidates.isEmpty()) {
                 appendLine("  none")
             } else {
@@ -57,10 +57,12 @@ object Diagnostics {
                 }
             }
 
-            appendLine()
-            appendLine("EVERYTHING ELSE IN THE TOP BAND")
-            others.take(MAX_LINES).forEach(::appendLine)
-            if (others.size > MAX_LINES) appendLine("... and ${others.size - MAX_LINES} more")
+            if (others.isNotEmpty()) {
+                appendLine()
+                appendLine("EVERYTHING ELSE IN THE TOP BAND")
+                others.take(MAX_LINES).forEach(::appendLine)
+                if (others.size > MAX_LINES) appendLine("... and ${others.size - MAX_LINES} more")
+            }
         }
         synchronized(screens) {
             val known = screens.containsKey(signature)

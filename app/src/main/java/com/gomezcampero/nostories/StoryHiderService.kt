@@ -35,6 +35,9 @@ class StoryHiderService : AccessibilityService() {
          * event to ride on.
          */
         val SETTLE_DELAYS_MS = longArrayOf(200L, 700L, 1500L)
+
+        /** How often a working cover re-describes itself for the report. */
+        const val COVER_REPORT_INTERVAL_MS = 1000L
     }
 
     /**
@@ -55,6 +58,7 @@ class StoryHiderService : AccessibilityService() {
     private var cachedRow: AccessibilityNodeInfo? = null
 
     private var lastDeepScanAt = 0L
+    private var lastCoverReportAt = 0L
 
     private val handler = Handler(Looper.getMainLooper())
     private val settle = Runnable { runSettlePass() }
@@ -152,7 +156,7 @@ class StoryHiderService : AccessibilityService() {
             if (row.refresh()) {
                 val bounds = StatusRowLocator.boundsOf(row)
                 if (row.isVisibleToUser && StatusRowLocator.isPlausible(bounds, screen)) {
-                    return Lookup.Found(StatusRowLocator.coverBounds(row, root))
+                    return found(row, root)
                 }
                 // The node is still there and we have just read its current
                 // bounds: it is not showing a row now. That is an answer, not
@@ -168,7 +172,10 @@ class StoryHiderService : AccessibilityService() {
         // passes below no longer decide what to cover - they had no way to
         // tell the row from a toolbar of icons, and the cost of being wrong
         // is covering a button you need. They diagnose instead.
-        StatusRowLocator.findBySeedId(root, screen)?.let { return keep(it, root) }
+        StatusRowLocator.findBySeedId(root, screen)?.let {
+            cachedRow = it
+            return found(it, root)
+        }
 
         // Missing the id tells us nothing on its own - the row may simply have
         // been renamed - so without a scan we have no answer, and saying
@@ -209,9 +216,31 @@ class StoryHiderService : AccessibilityService() {
         Log.d(TAG, "no known status row id on screen; best guess ${row?.viewIdResourceName}")
     }
 
-    private fun keep(row: AccessibilityNodeInfo, root: AccessibilityNodeInfo): Lookup.Found {
-        cachedRow = row
-        return Lookup.Found(StatusRowLocator.coverBounds(row, root))
+    /**
+     * Works out what to cover, and every so often writes down how it got
+     * there. Reporting the working case matters as much as reporting the
+     * broken one: whether the collapsed row is still made of these tiles is
+     * exactly what decides if covering the tiles is the right idea.
+     */
+    private fun found(row: AccessibilityNodeInfo, root: AccessibilityNodeInfo): Lookup.Found {
+        val cover = StatusRowLocator.coverBounds(row, root)
+
+        val now = System.currentTimeMillis()
+        if (now - lastCoverReportAt >= COVER_REPORT_INTERVAL_MS) {
+            lastCoverReportAt = now
+            Diagnostics.write(
+                context = this,
+                header = listOf(
+                    "screen=$screen",
+                    "covering by id=${row.viewIdResourceName}",
+                    "row bounds=${StatusRowLocator.boundsOf(row)}",
+                    "cover bounds=$cover",
+                    "row children=${row.childCount} scrollable=${row.isScrollable}",
+                ),
+                candidates = StatusRowLocator.describeTiles(row),
+            )
+        }
+        return Lookup.Found(cover)
     }
 
     private fun forgetRow() {
