@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
@@ -27,6 +28,12 @@ class MainActivity : Activity() {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
         findViewById<Button>(R.id.share_report).setOnClickListener { shareReport() }
+
+        val options = DebugOptions(this)
+        findViewById<Switch>(R.id.see_through).apply {
+            isChecked = options.seeThrough
+            setOnCheckedChangeListener { _, checked -> options.seeThrough = checked }
+        }
         findViewById<Button>(R.id.forget_row).setOnClickListener { forgetRow() }
     }
 

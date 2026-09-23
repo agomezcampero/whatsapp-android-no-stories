@@ -28,11 +28,13 @@ class StoryHiderService : AccessibilityService() {
 
         /**
          * A window change arrives before WhatsApp has finished laying the
-         * screen out, so the row is often not there yet. Look again shortly
-         * after; without this the cover stays off until something else moves
-         * on screen, which is why it was missing on reopening the app.
+         * screen out, so the row is often not there yet, and coming back from
+         * the background can take a while to settle. Look again a few times,
+         * stopping as soon as the row turns up: one pass at a fixed delay was
+         * not enough, and if nothing else moves on screen there is no other
+         * event to ride on.
          */
-        const val SETTLE_DELAY_MS = 450L
+        val SETTLE_DELAYS_MS = longArrayOf(200L, 700L, 1500L)
     }
 
     /**
@@ -55,7 +57,8 @@ class StoryHiderService : AccessibilityService() {
     private var lastDeepScanAt = 0L
 
     private val handler = Handler(Looper.getMainLooper())
-    private val settle = Runnable { recheck() }
+    private val settle = Runnable { runSettlePass() }
+    private var settlePass = 0
 
     private var screen = Rect()
 
@@ -93,7 +96,8 @@ class StoryHiderService : AccessibilityService() {
 
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             handler.removeCallbacks(settle)
-            handler.postDelayed(settle, SETTLE_DELAY_MS)
+            settlePass = 0
+            handler.postDelayed(settle, SETTLE_DELAYS_MS[0])
         }
 
         val deepScanAllowed = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
@@ -107,24 +111,47 @@ class StoryHiderService : AccessibilityService() {
         }
     }
 
-    /** A second look once the screen has settled, ignoring the scan throttle. */
-    private fun recheck() {
-        val overlay = overlay ?: return
-        val root = rootInActiveWindow ?: return
-        if (!WHATSAPP.contentEquals(root.packageName ?: "")) return
+    /** Looks again while the screen settles, giving up once the row is found. */
+    private fun runSettlePass() {
+        val found = recheck()
+        settlePass++
+        if (!found && settlePass < SETTLE_DELAYS_MS.size) {
+            handler.postDelayed(settle, SETTLE_DELAYS_MS[settlePass])
+        }
+    }
 
-        when (val lookup = lookUpRow(root, deepScanAllowed = true)) {
-            is Lookup.Found -> overlay.show(lookup.bounds)
-            Lookup.Gone -> overlay.hide()
-            Lookup.Unknown -> Unit
+    /** A fresh look, ignoring the scan throttle. True once the cover is up. */
+    private fun recheck(): Boolean {
+        val overlay = overlay ?: return false
+        val root = rootInActiveWindow ?: return false
+        if (!WHATSAPP.contentEquals(root.packageName ?: "")) return false
+
+        return when (val lookup = lookUpRow(root, deepScanAllowed = true)) {
+            is Lookup.Found -> {
+                overlay.show(lookup.bounds)
+                true
+            }
+            Lookup.Gone -> {
+                overlay.hide()
+                false
+            }
+            Lookup.Unknown -> false
         }
     }
 
     private fun lookUpRow(root: AccessibilityNodeInfo, deepScanAllowed: Boolean): Lookup {
         cachedRow?.let { row ->
-            if (row.refresh() && row.isVisibleToUser) {
+            if (row.refresh()) {
                 val bounds = StatusRowLocator.boundsOf(row)
-                if (StatusRowLocator.isRow(bounds, screen)) return Lookup.Found(bounds)
+                if (row.isVisibleToUser && StatusRowLocator.isRow(bounds, screen)) {
+                    return Lookup.Found(bounds)
+                }
+                // The node is still there and we have just read its current
+                // bounds: it is not showing a row now. That is an answer, not
+                // a shrug. Answering Unknown here is what left the cover
+                // parked over the toolbar once the row scrolled up behind it.
+                cachedRow = null
+                return Lookup.Gone
             }
             cachedRow = null
         }

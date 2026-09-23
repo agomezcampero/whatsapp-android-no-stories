@@ -17,7 +17,13 @@ import android.view.WindowManager
  */
 class OverlayController(private val context: Context) {
 
+    private companion object {
+        /** Translucent red: obvious, and you can read what is under it. */
+        const val SEE_THROUGH_COLOR = 0x60FF0000
+    }
+
     private val windowManager = context.getSystemService(WindowManager::class.java)
+    private val options = DebugOptions(context)
 
     private var overlay: View? = null
     private val shownBounds = Rect()
@@ -40,6 +46,9 @@ class OverlayController(private val context: Context) {
                 }
             return
         }
+
+        // Cheap, and the only way a flipped debug switch reaches the screen.
+        existing.setBackgroundColor(coverColor())
 
         if (shownBounds == bounds) return
         runCatching { windowManager.updateViewLayout(existing, layoutFor(bounds)) }
@@ -67,7 +76,8 @@ class OverlayController(private val context: Context) {
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-        PixelFormat.OPAQUE,
+        // Translucent throughout, or the see-through colour's alpha is ignored.
+        PixelFormat.TRANSLUCENT,
     ).apply {
         // Screen coordinates, to match AccessibilityNodeInfo.getBoundsInScreen.
         gravity = Gravity.TOP or Gravity.START
@@ -76,6 +86,7 @@ class OverlayController(private val context: Context) {
         title = context.getString(R.string.overlay_window_title)
     }
 
-    /** Resolved per call so values-night picks up the current mode. */
-    private fun coverColor() = context.getColor(R.color.story_row_cover)
+    /** Resolved per call so values-night and the debug switch both apply. */
+    private fun coverColor() =
+        if (options.seeThrough) SEE_THROUGH_COLOR else context.getColor(R.color.story_row_cover)
 }

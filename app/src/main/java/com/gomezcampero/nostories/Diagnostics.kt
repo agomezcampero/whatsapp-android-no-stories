@@ -20,12 +20,27 @@ object Diagnostics {
     private const val FILE = "detection-report.txt"
     private const val MAX_LINES = 120
 
+    /**
+     * Reports are kept per screen, because the last scan before you switch
+     * apps is whatever screen you happened to be on - and the one worth
+     * reading is the Chats list, which by then has been scrolled past.
+     */
+    private const val KEEP_SCREENS = 3
+    private const val REWRITE_AFTER_MS = 2000L
+
+    private val screens = LinkedHashMap<String, String>()
+    private var lastWriteAt = 0L
+
     fun write(
         context: Context,
         header: List<String>,
         candidates: List<String>,
         others: List<String> = emptyList(),
     ) {
+        val signature = (candidates + others)
+            .joinToString("|") { it.substringBefore(" class=") }
+            .ifEmpty { "empty" }
+
         val text = buildString {
             appendLine("No Stories detection report")
             appendLine(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()))
@@ -47,7 +62,21 @@ object Diagnostics {
             others.take(MAX_LINES).forEach(::appendLine)
             if (others.size > MAX_LINES) appendLine("... and ${others.size - MAX_LINES} more")
         }
-        runCatching { File(context.filesDir, FILE).writeText(text) }
+        synchronized(screens) {
+            val known = screens.containsKey(signature)
+            screens.remove(signature)
+            screens[signature] = text
+            while (screens.size > KEEP_SCREENS) {
+                screens.remove(screens.keys.first())
+            }
+
+            val now = System.currentTimeMillis()
+            if (known && now - lastWriteAt < REWRITE_AFTER_MS) return
+            lastWriteAt = now
+
+            val all = screens.values.reversed().joinToString("\n\n${"=".repeat(60)}\n\n")
+            runCatching { File(context.filesDir, FILE).writeText(all) }
+        }
     }
 
     fun read(context: Context): String? = runCatching {
