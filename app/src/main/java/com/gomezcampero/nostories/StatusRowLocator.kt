@@ -48,9 +48,19 @@ object StatusRowLocator {
     /** The row sits in the top bar, never below this fraction of the screen. */
     private const val TOP_REGION = 0.35f
 
-    /** A row of avatars is short, but never a hairline. */
+    /**
+     * A row of avatars is short, but never a hairline. The upper bound has to
+     * stay well under the height of the whole top bar (title, row and search
+     * together), or the climb in [rowAround] happily covers all three.
+     */
     private const val MIN_HEIGHT = 0.04f
-    private const val MAX_HEIGHT = 0.25f
+    private const val MAX_HEIGHT = 0.18f
+
+    /**
+     * And it is much wider than it is tall. This is what tells a strip of
+     * avatars apart from the block of chrome that contains it.
+     */
+    private const val MIN_ASPECT = 2.5f
 
     /** It spans most of the width; a single avatar does not. */
     private const val MIN_WIDTH = 0.5f
@@ -100,8 +110,9 @@ object StatusRowLocator {
         if (bounds.isEmpty) return false
         if (bounds.top >= screen.height() * TOP_REGION) return false
         if (bounds.width() < screen.width() * MIN_WIDTH) return false
-        return bounds.height() >= screen.height() * MIN_HEIGHT &&
-            bounds.height() <= screen.height() * MAX_HEIGHT
+        if (bounds.height() < screen.height() * MIN_HEIGHT) return false
+        if (bounds.height() > screen.height() * MAX_HEIGHT) return false
+        return bounds.width() >= bounds.height() * MIN_ASPECT
     }
 
     fun boundsOf(node: AccessibilityNodeInfo): Rect = Rect().also(node::getBoundsInScreen)
@@ -112,25 +123,30 @@ object StatusRowLocator {
     }
 
     /**
-     * Walks up from an avatar looking for the container that holds the whole
-     * row: a horizontally scrollable strip, or failing that the widest
-     * row-shaped ancestor within [MAX_CLIMB] hops.
+     * Walks up from an avatar to the container holding the whole row.
+     *
+     * It stops at the *innermost* ancestor that is row-shaped and spans the
+     * screen, because that is the strip itself - keep climbing and the next
+     * one up is the block holding the title bar and the search box too, which
+     * is wide and near the top and would otherwise pass [isRow].
      */
     private fun rowAround(avatar: AccessibilityNodeInfo, screen: Rect): AccessibilityNodeInfo? {
         var node: AccessibilityNodeInfo? = avatar
-        var widest: AccessibilityNodeInfo? = null
+        var narrow: AccessibilityNodeInfo? = null
         var hops = 0
 
         while (node != null && hops <= MAX_CLIMB) {
             val bounds = boundsOf(node)
             if (isRow(bounds, screen)) {
-                if (node.isScrollable || bounds.width() >= screen.width() * FULL_WIDTH) return node
-                if (widest == null || bounds.width() > boundsOf(widest).width()) widest = node
+                if (bounds.width() >= screen.width() * FULL_WIDTH) return node
+                // Row-shaped but not full width: remember the first one as a
+                // fallback, and keep looking for something that spans.
+                if (narrow == null) narrow = node
             }
             node = node.parent
             hops++
         }
-        return widest
+        return narrow
     }
 
     private fun normalize(text: CharSequence): String =

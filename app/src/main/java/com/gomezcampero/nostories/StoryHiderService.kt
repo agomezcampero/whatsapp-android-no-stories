@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.util.Log
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -21,6 +22,19 @@ class StoryHiderService : AccessibilityService() {
     private companion object {
         const val WHATSAPP = "com.whatsapp"
         const val DEEP_SCAN_INTERVAL_MS = 350L
+        const val TAG = "NoStories"
+    }
+
+    /**
+     * What a lookup established. [Unknown] is the important one: it means we
+     * did not actually look this time, which is not the same as the row being
+     * gone. Treating the two alike makes the cover blink, because WhatsApp
+     * sends content events far faster than the scan is allowed to run.
+     */
+    private sealed interface Lookup {
+        data class Found(val bounds: Rect) : Lookup
+        data object Gone : Lookup
+        data object Unknown : Lookup
     }
 
     private var overlay: OverlayController? = null
@@ -40,6 +54,10 @@ class StoryHiderService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val overlay = overlay ?: return
         val eventPackage = event?.packageName ?: return
+
+        // Our own overlay window must never be read as "some other app is on
+        // top now", or showing the cover would immediately hide it again.
+        if (packageName.contentEquals(eventPackage)) return
 
         // Cheapest possible filter, and the reason packageNames is not set in
         // accessibility_service_config.xml: we need the window change that
@@ -61,29 +79,40 @@ class StoryHiderService : AccessibilityService() {
         val deepScanAllowed = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
             System.currentTimeMillis() - lastDeepScanAt >= DEEP_SCAN_INTERVAL_MS
 
-        val bounds = rowBounds(root, deepScanAllowed)
-        if (bounds == null) overlay.hide() else overlay.show(bounds)
+        when (val lookup = lookUpRow(root, deepScanAllowed)) {
+            is Lookup.Found -> overlay.show(lookup.bounds)
+            Lookup.Gone -> overlay.hide()
+            // Leave the cover exactly where it is until we actually know.
+            Lookup.Unknown -> Unit
+        }
     }
 
-    private fun rowBounds(root: AccessibilityNodeInfo, deepScanAllowed: Boolean): Rect? {
+    private fun lookUpRow(root: AccessibilityNodeInfo, deepScanAllowed: Boolean): Lookup {
         cachedRow?.let { row ->
             if (row.refresh() && row.isVisibleToUser) {
                 val bounds = StatusRowLocator.boundsOf(row)
-                if (StatusRowLocator.isRow(bounds, screen)) return bounds
+                if (StatusRowLocator.isRow(bounds, screen)) return Lookup.Found(bounds)
             }
             cachedRow = null
         }
 
-        val row = StatusRowLocator.findById(root, screen)
-            ?: if (deepScanAllowed) {
-                lastDeepScanAt = System.currentTimeMillis()
-                StatusRowLocator.findByLabel(root, screen)
-            } else {
-                null
-            }
+        StatusRowLocator.findById(root, screen)?.let { return remember(it) }
 
+        // The id lookup missing tells us nothing while the ids are unconfirmed,
+        // so without a scan we have no answer - say so rather than hiding.
+        if (!deepScanAllowed) return Lookup.Unknown
+
+        lastDeepScanAt = System.currentTimeMillis()
+        val row = StatusRowLocator.findByLabel(root, screen) ?: return Lookup.Gone
+        return remember(row)
+    }
+
+    private fun remember(row: AccessibilityNodeInfo): Lookup.Found {
         cachedRow = row
-        return row?.let(StatusRowLocator::boundsOf)
+        val bounds = StatusRowLocator.boundsOf(row)
+        // Surfaces the attributes to put in ROW_VIEW_IDS: adb logcat -s NoStories
+        Log.d(TAG, "status row id=${row.viewIdResourceName} class=${row.className} bounds=$bounds")
+        return Lookup.Found(bounds)
     }
 
     private fun forgetRow() {
