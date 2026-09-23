@@ -55,6 +55,8 @@ class OverlayController(private val context: Context) {
             .onSuccess { shownBounds.set(bounds) }
     }
 
+    fun isShowing(): Boolean = overlay != null
+
     fun hide() {
         val view = overlay ?: return
         overlay = null

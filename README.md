@@ -25,16 +25,18 @@ and is removed when the row is gone or WhatsApp leaves the foreground.
 
 ## Finding the row
 
-No view ids ship with the app. It works the row out on first run and then
-remembers what it found, so it calibrates itself against whatever WhatsApp
-build is on the phone.
+**1. A confirmed id.** `com.whatsapp:id/status_list` - a `RecyclerView` of
+avatar tiles on the Chats tab, confirmed from a detection report. Not
+`updates_list`, which is the Updates tab and stays visible. WhatsApp
+obfuscates and reshuffles ids, so expect this to lapse on an update; the
+passes below carry on until a new id is added to `ROW_VIEW_IDS`.
 
-**1. The learned id.** Whatever finds the row, its `viewIdResourceName` goes
+**2. The learned id.** Whatever finds the row, its `viewIdResourceName` goes
 into `SharedPreferences` (`RowIdMemory`). Every run after that resolves it in a
 single call with no tree walk. If a WhatsApp update renames the row the id
 stops resolving, step 2 finds it again, and the new id replaces the old one.
 
-**2. Shape.** The row is identified by what it *is*, not by what it says: a
+**3. Shape.** The row is identified by what it *is*, not by what it says: a
 strip in the top band of the screen, much wider than it is tall, whose children
 are tile-shaped, level with each other, about equally wide, laid out side by
 side without overlapping, and tappable. A horizontally scrollable container
@@ -42,7 +44,7 @@ scores highest. No text is involved, so this holds in any language and survives
 WhatsApp rewording its labels. Only nodes starting inside the top band are
 walked at all, which skips the chat list entirely.
 
-**3. Labels.** Last resort: an avatar described as "Your status" / "Tu estado",
+**4. Labels.** Last resort: an avatar described as "Your status" / "Tu estado",
 then a climb to the row holding it. Its real job is the case where the row is
 down to a single tile, which step 2 deliberately will not match.
 
@@ -115,6 +117,10 @@ while another app is on top doesn't bring the overlay back.
   and `values-night/colors.xml`). If WhatsApp restyles its top bar, change them
   there.
 * The shape constants at the top of `StatusRowLocator` were tuned by
-  reasoning, not against a measured layout. If the cover comes out the wrong
-  size, they are what to adjust.
+  reasoning, not against a measured layout. They only matter once the ids
+  stop resolving; if the cover then comes out the wrong size, they are what
+  to adjust.
+* The cover tracks the row through accessibility events, so it cannot be
+  perfectly in step with WhatsApp's collapsing header. `notificationTimeout`
+  is 0 to keep the gap small.
 * The cover colours are a guess at WhatsApp's top bar and may want a nudge.

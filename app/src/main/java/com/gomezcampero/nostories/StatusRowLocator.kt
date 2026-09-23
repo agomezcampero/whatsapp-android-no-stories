@@ -100,12 +100,17 @@ object StatusRowLocator {
      * Ids confirmed against a real WhatsApp build, tried ahead of everything
      * else because a verified id beats anything the shape rules work out.
      *
-     * Empty until a detection report names one - see the README. WhatsApp
-     * obfuscates its ids, so expect these to stop resolving when it updates;
-     * that is not a failure, it just falls through to [findByStructure] until
-     * a new id is added here.
+     * Confirmed from a detection report: a RecyclerView of five 178x237
+     * tiles at Rect(0, 294 - 1080, 573) on the Chats tab. Not to be confused
+     * with updates_list, which is the Updates tab and stays visible.
+     *
+     * Expect this to stop resolving when WhatsApp updates; that is not a
+     * failure, it just falls through to [findByStructure] until a new id is
+     * added here.
      */
-    private val ROW_VIEW_IDS = listOf<String>()
+    private val ROW_VIEW_IDS = listOf(
+        "com.whatsapp:id/status_list",
+    )
 
     private val ACCENTS = "\\p{Mn}+".toRegex()
 
@@ -116,7 +121,21 @@ object StatusRowLocator {
     /** Resolves a known id. Cheap: no tree walk on our side. */
     fun findByViewId(root: AccessibilityNodeInfo, id: String, screen: Rect): AccessibilityNodeInfo? =
         root.findAccessibilityNodeInfosByViewId(id)
-            .firstOrNull { it.isVisibleToUser && isRow(boundsOf(it), screen) }
+            .firstOrNull { it.isVisibleToUser && isPlausible(boundsOf(it), screen) }
+
+    /**
+     * The check for a node we resolved by id, where the id already settles
+     * what it is. All that is left to confirm is that it is on screen, in the
+     * top band, and not so tall that covering it would swallow the list.
+     *
+     * [isRow] is deliberately not used here: when the header collapses, the
+     * row shrinks to a cluster of overlapping circles far too narrow to pass
+     * it, and covering that is still the right thing to do.
+     */
+    fun isPlausible(bounds: Rect, screen: Rect): Boolean =
+        !bounds.isEmpty &&
+            bounds.top < screen.height() * TOP_REGION &&
+            bounds.height() <= screen.height() * MAX_HEIGHT
 
     /**
      * Finds the row by its shape: the best-scoring strip of side-by-side tiles
