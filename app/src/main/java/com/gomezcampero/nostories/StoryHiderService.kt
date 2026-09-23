@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -38,6 +39,18 @@ class StoryHiderService : AccessibilityService() {
 
         /** How often a working cover re-describes itself for the report. */
         const val COVER_REPORT_INTERVAL_MS = 1000L
+
+        /**
+         * How often to check the row's position while WhatsApp is in front.
+         *
+         * The original plan said no polling, and events alone ought to be
+         * enough. They are not: WhatsApp rebuilds the list on its own, and if
+         * nothing moves on screen afterwards no event ever arrives, so the
+         * stories come back and stay back. This ticks only while WhatsApp is
+         * the app in front and the screen is on, and each tick is the same
+         * cheap id lookup an event would do.
+         */
+        const val HEARTBEAT_MS = 500L
     }
 
     /**
@@ -53,7 +66,6 @@ class StoryHiderService : AccessibilityService() {
     }
 
     private var overlay: OverlayController? = null
-    private var sampler: BackgroundSampler? = null
 
     /** The row we found last time, re-read with refresh() instead of a walk. */
     private var cachedRow: AccessibilityNodeInfo? = null
@@ -65,11 +77,12 @@ class StoryHiderService : AccessibilityService() {
     private val settle = Runnable { runSettlePass() }
     private var settlePass = 0
 
+    private val heartbeat = Runnable { checkWhileWhatsAppIsInFront() }
+
     private var screen = Rect()
 
     override fun onServiceConnected() {
         overlay = OverlayController(this)
-        sampler = BackgroundSampler(this)
         cachedRow = null
         screen = displayBounds()
     }
@@ -86,10 +99,13 @@ class StoryHiderService : AccessibilityService() {
         // accessibility_service_config.xml: we need the window change that
         // fires when WhatsApp goes away, so the cover goes with it.
         if (!WHATSAPP.contentEquals(eventPackage)) {
+            stopHeartbeat()
             forgetRow()
             overlay.hide()
             return
         }
+
+        armHeartbeat()
 
         val root = rootInActiveWindow
         if (root == null || !WHATSAPP.contentEquals(root.packageName ?: "")) {
@@ -117,6 +133,35 @@ class StoryHiderService : AccessibilityService() {
             // Leave the cover exactly where it is until we actually know.
             Lookup.Unknown -> Unit
         }
+    }
+
+    /**
+     * Re-checks where the row is, and can only put the cover up or move it.
+     * Taking it down stays the business of events and of a proper look:
+     * every way the cover has gone missing so far has been something
+     * concluding too much from one glance, and a tick is the shallowest
+     * glance there is.
+     */
+    private fun checkWhileWhatsAppIsInFront() {
+        val overlay = overlay ?: return
+        if (getSystemService(PowerManager::class.java)?.isInteractive == false) return
+
+        val root = rootInActiveWindow ?: return
+        if (!WHATSAPP.contentEquals(root.packageName ?: "")) return
+
+        val lookup = lookUpRow(root, deepScanAllowed = false)
+        if (lookup is Lookup.Found) overlay.show(lookup.bounds)
+
+        armHeartbeat()
+    }
+
+    private fun armHeartbeat() {
+        handler.removeCallbacks(heartbeat)
+        handler.postDelayed(heartbeat, HEARTBEAT_MS)
+    }
+
+    private fun stopHeartbeat() {
+        handler.removeCallbacks(heartbeat)
     }
 
     private fun armSettlePasses() {
@@ -226,10 +271,6 @@ class StoryHiderService : AccessibilityService() {
     private fun found(row: AccessibilityNodeInfo, root: AccessibilityNodeInfo): Lookup.Found {
         val cover = StatusRowLocator.coverBounds(row, root)
 
-        sampler?.sample(StatusRowLocator.boundsOf(row), screen) { color ->
-            overlay?.useSampledColor(color)
-        }
-
         val now = System.currentTimeMillis()
         if (now - lastCoverReportAt >= COVER_REPORT_INTERVAL_MS) {
             lastCoverReportAt = now
@@ -258,8 +299,6 @@ class StoryHiderService : AccessibilityService() {
         // Rotation moves the row; night mode changes the colour it should be.
         screen = displayBounds()
         forgetRow()
-        // The background behind the row has probably changed with the theme.
-        overlay?.useSampledColor(null)
         overlay?.refreshColor()
     }
 
@@ -276,6 +315,7 @@ class StoryHiderService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         handler.removeCallbacks(settle)
+        stopHeartbeat()
         overlay?.hide()
         forgetRow()
         return super.onUnbind(intent)
@@ -283,6 +323,7 @@ class StoryHiderService : AccessibilityService() {
 
     override fun onDestroy() {
         handler.removeCallbacks(settle)
+        stopHeartbeat()
         overlay?.hide()
         overlay = null
         forgetRow()

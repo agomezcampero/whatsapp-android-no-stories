@@ -14,7 +14,6 @@
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
-    android:canTakeScreenshot="true"
     android:description="@string/service_description"
     android:notificationTimeout="0"
     android:settingsActivity="com.gomezcampero.nostories.MainActivity" />

@@ -92,7 +92,13 @@ Sideload only. This is not for the Play Store.
 * The scans are breadth-first, capped at 800 nodes, throttled to one run per
   350 ms, and never descend below the top band of the screen.
 * The overlay window is only moved when its bounds actually change.
-* No polling, no wake locks, no dependencies beyond the platform and Kotlin.
+* No wake locks, no dependencies beyond the platform and Kotlin.
+* The row's position is re-checked every 500ms while WhatsApp is in front and
+  the screen is on, and not otherwise. The plan said no polling and events
+  ought to be enough, but WhatsApp rebuilds its list on its own, and when
+  nothing moves on screen afterwards no event arrives and the stories come
+  back for good. A tick can only put the cover up or move it; taking it down
+  stays with events.
 
 ## Deliberate deviation: `packageNames`
 
