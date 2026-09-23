@@ -106,16 +106,26 @@ object StatusRowLocator {
     /**
      * Finds the row by its shape: the best-scoring strip of side-by-side tiles
      * in the top band of the screen.
+     *
+     * [log] receives a line per candidate that got as far as the tile checks,
+     * which is what [Diagnostics] reports.
      */
-    fun findByStructure(root: AccessibilityNodeInfo, screen: Rect): AccessibilityNodeInfo? {
+    fun findByStructure(
+        root: AccessibilityNodeInfo,
+        screen: Rect,
+        log: ((String) -> Unit)? = null,
+    ): AccessibilityNodeInfo? {
         var best: AccessibilityNodeInfo? = null
         var bestScore = 0
 
         forEachNodeInTopBand(root, screen) { node, bounds ->
-            if (isRow(bounds, screen) && holdsTiles(node)) {
+            if (isRow(bounds, screen)) {
+                val verdict = inspectTiles(node)
                 val score = scoreOf(node)
+                log?.invoke(describe(node, bounds, verdict, score))
+
                 val tighter = best != null && bounds.height() < boundsOf(best!!).height()
-                if (score > bestScore || (score == bestScore && tighter)) {
+                if (verdict.accepted && (score > bestScore || (score == bestScore && tighter))) {
                     best = node
                     bestScore = score
                 }
@@ -123,6 +133,24 @@ object StatusRowLocator {
         }
         return best
     }
+
+    private fun describe(
+        node: AccessibilityNodeInfo,
+        bounds: Rect,
+        verdict: TileVerdict,
+        score: Int,
+    ): String = "id=${node.viewIdResourceName} class=${node.className} bounds=$bounds " +
+        "children=${node.childCount} tiles=${verdict.tiles} tappable=${verdict.tappable} " +
+        "scrollable=${node.isScrollable} score=$score -> ${verdict.reason}\n" +
+        "    tiles: ${verdict.shapes}"
+
+    private class TileVerdict(
+        val accepted: Boolean,
+        val reason: String,
+        val tiles: Int = 0,
+        val tappable: Int = 0,
+        val shapes: String = "",
+    )
 
     /** Finds a labelled avatar in the top bar and climbs to the row holding it. */
     fun findByLabel(root: AccessibilityNodeInfo, screen: Rect): AccessibilityNodeInfo? {
@@ -174,25 +202,33 @@ object StatusRowLocator {
     }
 
     /**
-     * True when this node's children look like a row of avatars: enough of
-     * them, tappable, tile-shaped, level with each other and side by side.
+     * Whether this node's children look like a row of avatars: enough of them,
+     * tappable, tile-shaped, level with each other and side by side. Reports
+     * the first rule that rejected them, so a report says what went wrong.
      */
-    private fun holdsTiles(node: AccessibilityNodeInfo): Boolean {
-        if (node.childCount < MIN_TILES) return false
+    private fun inspectTiles(node: AccessibilityNodeInfo): TileVerdict {
+        if (node.childCount < MIN_TILES) return TileVerdict(false, "only ${node.childCount} children")
 
         val tiles = ArrayList<Rect>(node.childCount)
-        var clickable = 0
+        var tappable = 0
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val bounds = boundsOf(child)
             if (bounds.isEmpty) continue
-            if (isTappable(child)) clickable++
+            if (isTappable(child)) tappable++
             tiles.add(bounds)
         }
 
-        if (tiles.size < MIN_TILES) return false
-        if (clickable < MIN_CLICKABLE_TILES) return false
-        return tileShaped(tiles) && level(tiles) && evenlyWide(tiles) && sideBySide(tiles)
+        val shapes = tiles.joinToString(" ") { "${it.width()}x${it.height()}@${it.left},${it.top}" }
+        fun verdict(ok: Boolean, reason: String) = TileVerdict(ok, reason, tiles.size, tappable, shapes)
+
+        if (tiles.size < MIN_TILES) return verdict(false, "only ${tiles.size} tiles with bounds")
+        if (tappable < MIN_CLICKABLE_TILES) return verdict(false, "only $tappable tappable")
+        if (!tileShaped(tiles)) return verdict(false, "tiles not avatar shaped")
+        if (!level(tiles)) return verdict(false, "tiles not level")
+        if (!evenlyWide(tiles)) return verdict(false, "tiles unevenly wide")
+        if (!sideBySide(tiles)) return verdict(false, "tiles not side by side")
+        return verdict(true, "accepted")
     }
 
     /**

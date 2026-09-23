@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -23,6 +25,14 @@ class StoryHiderService : AccessibilityService() {
         const val WHATSAPP = "com.whatsapp"
         const val DEEP_SCAN_INTERVAL_MS = 350L
         const val TAG = "NoStories"
+
+        /**
+         * A window change arrives before WhatsApp has finished laying the
+         * screen out, so the row is often not there yet. Look again shortly
+         * after; without this the cover stays off until something else moves
+         * on screen, which is why it was missing on reopening the app.
+         */
+        const val SETTLE_DELAY_MS = 450L
     }
 
     /**
@@ -43,6 +53,9 @@ class StoryHiderService : AccessibilityService() {
     /** The row we found last time, re-read with refresh() instead of a walk. */
     private var cachedRow: AccessibilityNodeInfo? = null
     private var lastDeepScanAt = 0L
+
+    private val handler = Handler(Looper.getMainLooper())
+    private val settle = Runnable { recheck() }
 
     private var screen = Rect()
 
@@ -78,6 +91,11 @@ class StoryHiderService : AccessibilityService() {
             return
         }
 
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            handler.removeCallbacks(settle)
+            handler.postDelayed(settle, SETTLE_DELAY_MS)
+        }
+
         val deepScanAllowed = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
             System.currentTimeMillis() - lastDeepScanAt >= DEEP_SCAN_INTERVAL_MS
 
@@ -85,6 +103,19 @@ class StoryHiderService : AccessibilityService() {
             is Lookup.Found -> overlay.show(lookup.bounds)
             Lookup.Gone -> overlay.hide()
             // Leave the cover exactly where it is until we actually know.
+            Lookup.Unknown -> Unit
+        }
+    }
+
+    /** A second look once the screen has settled, ignoring the scan throttle. */
+    private fun recheck() {
+        val overlay = overlay ?: return
+        val root = rootInActiveWindow ?: return
+        if (!WHATSAPP.contentEquals(root.packageName ?: "")) return
+
+        when (val lookup = lookUpRow(root, deepScanAllowed = true)) {
+            is Lookup.Found -> overlay.show(lookup.bounds)
+            Lookup.Gone -> overlay.hide()
             Lookup.Unknown -> Unit
         }
     }
@@ -110,11 +141,23 @@ class StoryHiderService : AccessibilityService() {
 
         lastDeepScanAt = System.currentTimeMillis()
 
-        val row = StatusRowLocator.findByStructure(root, screen)
+        val candidates = mutableListOf<String>()
+        val row = StatusRowLocator.findByStructure(root, screen, candidates::add)
             ?: StatusRowLocator.findByLabel(root, screen)
-            ?: return Lookup.Gone
 
-        return keep(row)
+        Diagnostics.write(
+            context = this,
+            header = listOf(
+                "screen=$screen",
+                "learned id=${memory?.learned() ?: "none"}",
+                "chosen=${row?.viewIdResourceName ?: "nothing"} " +
+                    "bounds=${row?.let(StatusRowLocator::boundsOf) ?: "-"}",
+                "found by=${if (row == null) "-" else if (candidates.any { it.endsWith("accepted") }) "shape" else "label"}",
+            ),
+            candidates = candidates,
+        )
+
+        return if (row == null) Lookup.Gone else keep(row)
     }
 
     private fun keep(row: AccessibilityNodeInfo): Lookup.Found {
@@ -151,12 +194,14 @@ class StoryHiderService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onUnbind(intent: Intent?): Boolean {
+        handler.removeCallbacks(settle)
         overlay?.hide()
         forgetRow()
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(settle)
         overlay?.hide()
         overlay = null
         forgetRow()
