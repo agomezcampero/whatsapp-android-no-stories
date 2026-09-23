@@ -46,11 +46,26 @@ class StoryHiderService : AccessibilityService() {
          * The original plan said no polling, and events alone ought to be
          * enough. They are not: WhatsApp rebuilds the list on its own, and if
          * nothing moves on screen afterwards no event ever arrives, so the
-         * stories come back and stay back. This ticks only while WhatsApp is
-         * the app in front and the screen is on, and each tick is the same
-         * cheap id lookup an event would do.
+         * stories come back and stay back. Each tick is the same cheap id
+         * lookup an event would do.
+         *
+         * Every event pushes the next tick back, so a screen that is busy
+         * never ticks at all - it does not need to, the events are doing the
+         * work. Ticking only happens once things go quiet, which is exactly
+         * the case this exists for.
          */
         const val HEARTBEAT_MS = 500L
+
+        /** Once the row has stopped resolving, ease off before giving up. */
+        const val HEARTBEAT_SLOW_MS = 2000L
+
+        /**
+         * Misses tolerated before asking, once, whether the Chats screen is
+         * even on show. The answer costs more than a tick does, so it is not
+         * worth asking every time - but anywhere else in WhatsApp the row
+         * will never resolve, and ticking there is pure waste.
+         */
+        const val MISSES_BEFORE_CHECKING_SCREEN = 3
     }
 
     /**
@@ -78,6 +93,7 @@ class StoryHiderService : AccessibilityService() {
     private var settlePass = 0
 
     private val heartbeat = Runnable { checkWhileWhatsAppIsInFront() }
+    private var heartbeatMisses = 0
 
     private var screen = Rect()
 
@@ -144,20 +160,36 @@ class StoryHiderService : AccessibilityService() {
      */
     private fun checkWhileWhatsAppIsInFront() {
         val overlay = overlay ?: return
+        // Not re-arming is how this stops: nothing ticks behind a dark screen
+        // or behind another app, and an event starts it again.
         if (getSystemService(PowerManager::class.java)?.isInteractive == false) return
 
         val root = rootInActiveWindow ?: return
         if (!WHATSAPP.contentEquals(root.packageName ?: "")) return
 
         val lookup = lookUpRow(root, deepScanAllowed = false)
-        if (lookup is Lookup.Found) overlay.show(lookup.bounds)
+        if (lookup is Lookup.Found) {
+            overlay.show(lookup.bounds)
+            heartbeatMisses = 0
+            armHeartbeat(HEARTBEAT_MS)
+            return
+        }
 
-        armHeartbeat()
+        // The row did not resolve. Either the list is being rebuilt - the
+        // case this loop exists for - or we are somewhere else in WhatsApp
+        // entirely, where it never will.
+        heartbeatMisses++
+        when {
+            heartbeatMisses < MISSES_BEFORE_CHECKING_SCREEN -> armHeartbeat(HEARTBEAT_MS)
+            StatusRowLocator.looksLikeChatsScreen(root) -> armHeartbeat(HEARTBEAT_SLOW_MS)
+            // Not the Chats screen: stop until an event says otherwise.
+            else -> Unit
+        }
     }
 
-    private fun armHeartbeat() {
+    private fun armHeartbeat(delayMs: Long = HEARTBEAT_MS) {
         handler.removeCallbacks(heartbeat)
-        handler.postDelayed(heartbeat, HEARTBEAT_MS)
+        handler.postDelayed(heartbeat, delayMs)
     }
 
     private fun stopHeartbeat() {

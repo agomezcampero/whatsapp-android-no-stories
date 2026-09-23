@@ -93,12 +93,19 @@ Sideload only. This is not for the Play Store.
   350 ms, and never descend below the top band of the screen.
 * The overlay window is only moved when its bounds actually change.
 * No wake locks, no dependencies beyond the platform and Kotlin.
-* The row's position is re-checked every 500ms while WhatsApp is in front and
-  the screen is on, and not otherwise. The plan said no polling and events
-  ought to be enough, but WhatsApp rebuilds its list on its own, and when
-  nothing moves on screen afterwards no event arrives and the stories come
-  back for good. A tick can only put the cover up or move it; taking it down
-  stays with events.
+* The row's position is re-checked every 500ms, and only while WhatsApp is in
+  front, the screen is on, and the row is still resolving. The plan said no
+  polling and events ought to be enough, but WhatsApp rebuilds its list on its
+  own, and when nothing moves on screen afterwards no event arrives and the
+  stories come back for good.
+
+  It costs very little. Every event pushes the next tick back, so a busy
+  screen never ticks - the events are already doing the work - and ticking
+  only starts once things go quiet. Each tick is a node refresh, the same
+  thing an event would do. Three misses in a row buy one check of whether the
+  Chats screen is even on show, and anywhere else in WhatsApp the loop stops
+  until an event restarts it. A tick can only put the cover up or move it;
+  taking it down stays with events.
 
 ## Deliberate deviation: `packageNames`
 
