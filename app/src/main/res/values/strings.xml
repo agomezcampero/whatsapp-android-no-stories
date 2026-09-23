@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">No Stories</string>
+    <string name="service_label">No Stories</string>
+    <string name="service_description">Covers the row of status avatars at the top of WhatsApp\'s Chats screen. Reads WhatsApp\'s screen contents to find that row; nothing is stored or sent anywhere.</string>
+    <!-- Window manager debug title, never shown to anyone. -->
+    <string name="overlay_window_title" translatable="false">No Stories overlay</string>
+    <string name="intro">Hides the row of status avatars at the top of WhatsApp\'s Chats screen. The Updates tab still works.</string>
+    <string name="setup">Enable the No Stories accessibility service. On Android 13 and newer, first allow restricted settings for this app: Settings &#8594; Apps &#8594; No Stories &#8594; ⋮ &#8594; Allow restricted settings.</string>
+    <string name="status_on">Service is on.</string>
+    <string name="status_off">Service is off.</string>
+    <string name="open_settings">Open Accessibility settings</string>
+    <string name="debug_hint">If the stories stop being covered: open WhatsApp on Chats, come back here, and share the report. It names what the row looks like now.</string>
+    <string name="see_through">See-through cover</string>
+    <string name="share_report">Share detection report</string>
+    <string name="report_subject">No Stories detection report</string>
+    <string name="no_report">No report yet. Open WhatsApp on the Chats tab first.</string>
+</resources>
