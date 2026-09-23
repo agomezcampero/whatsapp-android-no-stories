@@ -96,7 +96,22 @@ object StatusRowLocator {
         "actualizacion de estado",
     )
 
+    /**
+     * Ids confirmed against a real WhatsApp build, tried ahead of everything
+     * else because a verified id beats anything the shape rules work out.
+     *
+     * Empty until a detection report names one - see the README. WhatsApp
+     * obfuscates its ids, so expect these to stop resolving when it updates;
+     * that is not a failure, it just falls through to [findByStructure] until
+     * a new id is added here.
+     */
+    private val ROW_VIEW_IDS = listOf<String>()
+
     private val ACCENTS = "\\p{Mn}+".toRegex()
+
+    /** Resolves whichever shipped id this WhatsApp build still answers to. */
+    fun findBySeedId(root: AccessibilityNodeInfo, screen: Rect): AccessibilityNodeInfo? =
+        ROW_VIEW_IDS.firstNotNullOfOrNull { findByViewId(root, it, screen) }
 
     /** Resolves a known id. Cheap: no tree walk on our side. */
     fun findByViewId(root: AccessibilityNodeInfo, id: String, screen: Rect): AccessibilityNodeInfo? =
@@ -107,13 +122,16 @@ object StatusRowLocator {
      * Finds the row by its shape: the best-scoring strip of side-by-side tiles
      * in the top band of the screen.
      *
-     * [log] receives a line per candidate that got as far as the tile checks,
-     * which is what [Diagnostics] reports.
+     * [log] gets a line for *every* node in the top band, flagged with whether
+     * it was row-shaped enough to reach the tile checks. Everything is
+     * reported, not just the candidates, because a row that fails [isRow] is
+     * exactly the case the shape rules got wrong - and it would be invisible
+     * in a report that only listed what passed.
      */
     fun findByStructure(
         root: AccessibilityNodeInfo,
         screen: Rect,
-        log: ((String) -> Unit)? = null,
+        log: ((rowShaped: Boolean, line: String) -> Unit)? = null,
     ): AccessibilityNodeInfo? {
         var best: AccessibilityNodeInfo? = null
         var bestScore = 0
@@ -122,16 +140,33 @@ object StatusRowLocator {
             if (isRow(bounds, screen)) {
                 val verdict = inspectTiles(node)
                 val score = scoreOf(node)
-                log?.invoke(describe(node, bounds, verdict, score))
+                log?.invoke(true, describe(node, bounds, verdict, score))
 
                 val tighter = best != null && bounds.height() < boundsOf(best!!).height()
                 if (verdict.accepted && (score > bestScore || (score == bestScore && tighter))) {
                     best = node
                     bestScore = score
                 }
+            } else {
+                log?.invoke(false, outline(node, bounds, screen))
             }
         }
         return best
+    }
+
+    /** A node that never reached the tile checks, and what stopped it. */
+    private fun outline(node: AccessibilityNodeInfo, bounds: Rect, screen: Rect): String =
+        "id=${node.viewIdResourceName} class=${node.className} bounds=$bounds " +
+            "children=${node.childCount} scrollable=${node.isScrollable} " +
+            "text=${node.contentDescription ?: node.text ?: ""} -> not row shaped " +
+            "(${whyNotARow(bounds, screen)})"
+
+    private fun whyNotARow(bounds: Rect, screen: Rect): String = when {
+        bounds.isEmpty -> "empty"
+        bounds.width() < screen.width() * MIN_WIDTH -> "too narrow"
+        bounds.height() < screen.height() * MIN_HEIGHT -> "too short"
+        bounds.height() > screen.height() * MAX_HEIGHT -> "too tall"
+        else -> "not wide enough for its height"
     }
 
     private fun describe(

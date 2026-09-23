@@ -129,7 +129,10 @@ class StoryHiderService : AccessibilityService() {
             cachedRow = null
         }
 
-        // The id we learned last time: one call, and the usual case.
+        // A confirmed id, if this build of WhatsApp still answers to one.
+        StatusRowLocator.findBySeedId(root, screen)?.let { return keep(it) }
+
+        // Otherwise the id we learned last time: one call, and the usual case.
         memory?.learned()?.let { id ->
             StatusRowLocator.findByViewId(root, id, screen)?.let { return keep(it) }
         }
@@ -142,8 +145,10 @@ class StoryHiderService : AccessibilityService() {
         lastDeepScanAt = System.currentTimeMillis()
 
         val candidates = mutableListOf<String>()
-        val row = StatusRowLocator.findByStructure(root, screen, candidates::add)
-            ?: StatusRowLocator.findByLabel(root, screen)
+        val others = mutableListOf<String>()
+        val row = StatusRowLocator.findByStructure(root, screen) { rowShaped, line ->
+            (if (rowShaped) candidates else others).add(line)
+        } ?: StatusRowLocator.findByLabel(root, screen)
 
         Diagnostics.write(
             context = this,
@@ -155,6 +160,7 @@ class StoryHiderService : AccessibilityService() {
                 "found by=${if (row == null) "-" else if (candidates.any { it.endsWith("accepted") }) "shape" else "label"}",
             ),
             candidates = candidates,
+            others = others,
         )
 
         return if (row == null) Lookup.Gone else keep(row)

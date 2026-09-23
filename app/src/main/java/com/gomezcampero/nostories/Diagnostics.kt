@@ -20,21 +20,32 @@ object Diagnostics {
     private const val FILE = "detection-report.txt"
     private const val MAX_LINES = 120
 
-    fun write(context: Context, header: List<String>, candidates: List<String>) {
+    fun write(
+        context: Context,
+        header: List<String>,
+        candidates: List<String>,
+        others: List<String> = emptyList(),
+    ) {
         val text = buildString {
             appendLine("No Stories detection report")
             appendLine(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()))
             appendLine()
             header.forEach(::appendLine)
             appendLine()
+            appendLine("ROW SHAPED (reached the tile checks)")
             if (candidates.isEmpty()) {
-                appendLine("no candidates passed the row shape test")
+                appendLine("  none")
             } else {
                 candidates.take(MAX_LINES).forEach(::appendLine)
                 if (candidates.size > MAX_LINES) {
                     appendLine("... and ${candidates.size - MAX_LINES} more")
                 }
             }
+
+            appendLine()
+            appendLine("EVERYTHING ELSE IN THE TOP BAND")
+            others.take(MAX_LINES).forEach(::appendLine)
+            if (others.size > MAX_LINES) appendLine("... and ${others.size - MAX_LINES} more")
         }
         runCatching { File(context.filesDir, FILE).writeText(text) }
     }
