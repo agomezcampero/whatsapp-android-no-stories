@@ -125,6 +125,9 @@ object StatusRowLocator {
      */
     private const val SEARCH_BAR_ID = "com.whatsapp:id/my_search_bar"
 
+    /** The overflow menu, which the cover must never reach. */
+    private const val OVERFLOW_ID = "com.whatsapp:id/menuitem_overflow"
+
     private val CHATS_SCREEN_IDS = listOf(
         SEARCH_BAR_ID,
         "com.whatsapp:id/conversations_coordinator_layout",
@@ -155,14 +158,40 @@ object StatusRowLocator {
 
         val cover = if (tiles.isEmpty) boundsOf(row) else tiles
 
-        val searchBarTop = root.findAccessibilityNodeInfosByViewId(SEARCH_BAR_ID)
-            .firstOrNull()
-            ?.let { boundsOf(it).top }
-        if (searchBarTop != null && searchBarTop > cover.top && cover.bottom > searchBarTop) {
-            cover.bottom = searchBarTop
-        }
+        keepClear(cover, root)
         return cover
     }
+
+    /**
+     * Shrinks [cover] away from the controls it must never sit on.
+     *
+     * Asking these widgets where they are beats inferring it: the cover is
+     * touchable, so overlapping one does not merely look wrong, it swallows
+     * taps on it. This is what stops a cover that is late, or too wide
+     * during a scroll, from being anything worse than cosmetic.
+     */
+    private fun keepClear(cover: Rect, root: AccessibilityNodeInfo) {
+        boundsOfId(root, SEARCH_BAR_ID)?.let { searchBar ->
+            if (searchBar.top > cover.top && cover.bottom > searchBar.top) {
+                cover.bottom = searchBar.top
+            }
+        }
+        boundsOfId(root, OVERFLOW_ID)?.let { overflow ->
+            val sameBand = cover.top < overflow.bottom && cover.bottom > overflow.top
+            if (sameBand && overflow.left > cover.left && cover.right > overflow.left) {
+                cover.right = overflow.left
+            }
+        }
+    }
+
+    private fun boundsOfId(root: AccessibilityNodeInfo, id: String): Rect? =
+        root.findAccessibilityNodeInfosByViewId(id)
+            .firstOrNull { it.isVisibleToUser }
+            ?.let(::boundsOf)
+
+    /** What the row says it can be asked to do - a collapse action would do. */
+    fun describeActions(row: AccessibilityNodeInfo): String =
+        row.actionList.joinToString(" ") { it.id.toString() }
 
     /** One line per child of the row, for a report of a working cover. */
     fun describeTiles(row: AccessibilityNodeInfo): List<String> =

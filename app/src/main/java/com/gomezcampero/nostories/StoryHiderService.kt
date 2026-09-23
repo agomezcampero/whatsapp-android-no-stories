@@ -53,6 +53,7 @@ class StoryHiderService : AccessibilityService() {
     }
 
     private var overlay: OverlayController? = null
+    private var sampler: BackgroundSampler? = null
 
     /** The row we found last time, re-read with refresh() instead of a walk. */
     private var cachedRow: AccessibilityNodeInfo? = null
@@ -68,6 +69,7 @@ class StoryHiderService : AccessibilityService() {
 
     override fun onServiceConnected() {
         overlay = OverlayController(this)
+        sampler = BackgroundSampler(this)
         cachedRow = null
         screen = displayBounds()
     }
@@ -225,6 +227,10 @@ class StoryHiderService : AccessibilityService() {
     private fun found(row: AccessibilityNodeInfo, root: AccessibilityNodeInfo): Lookup.Found {
         val cover = StatusRowLocator.coverBounds(row, root)
 
+        sampler?.sample(StatusRowLocator.boundsOf(row), screen) { color ->
+            overlay?.useSampledColor(color)
+        }
+
         val now = System.currentTimeMillis()
         if (now - lastCoverReportAt >= COVER_REPORT_INTERVAL_MS) {
             lastCoverReportAt = now
@@ -236,6 +242,7 @@ class StoryHiderService : AccessibilityService() {
                     "row bounds=${StatusRowLocator.boundsOf(row)}",
                     "cover bounds=$cover",
                     "row children=${row.childCount} scrollable=${row.isScrollable}",
+                    "row actions=${StatusRowLocator.describeActions(row)}",
                 ),
                 candidates = StatusRowLocator.describeTiles(row),
             )
@@ -252,6 +259,8 @@ class StoryHiderService : AccessibilityService() {
         // Rotation moves the row; night mode changes the colour it should be.
         screen = displayBounds()
         forgetRow()
+        // The background behind the row has probably changed with the theme.
+        overlay?.useSampledColor(null)
         overlay?.refreshColor()
     }
 

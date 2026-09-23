@@ -28,6 +28,9 @@ class OverlayController(private val context: Context) {
     private var overlay: View? = null
     private val shownBounds = Rect()
 
+    /** The colour read off the screen, when we have managed to read one. */
+    private var sampledColor: Int? = null
+
     /** Shows the cover over [bounds], moving it only when [bounds] changed. */
     fun show(bounds: Rect) {
         val existing = overlay
@@ -69,6 +72,18 @@ class OverlayController(private val context: Context) {
         overlay?.setBackgroundColor(coverColor())
     }
 
+    /**
+     * The colour WhatsApp is actually drawing behind the row, sampled from
+     * the screen. Worth more than accuracy of position: a rectangle of
+     * exactly the right colour, slightly out of place over background, is
+     * invisible. Only overlapping content gives it away.
+     */
+    fun useSampledColor(color: Int?) {
+        if (color == sampledColor) return
+        sampledColor = color
+        refreshColor()
+    }
+
     private fun layoutFor(bounds: Rect) = WindowManager.LayoutParams(
         bounds.width(),
         bounds.height(),
@@ -89,6 +104,9 @@ class OverlayController(private val context: Context) {
     }
 
     /** Resolved per call so values-night and the debug switch both apply. */
-    private fun coverColor() =
-        if (options.seeThrough) SEE_THROUGH_COLOR else context.getColor(R.color.story_row_cover)
+    private fun coverColor() = when {
+        options.seeThrough -> SEE_THROUGH_COLOR
+        // The guess in colors.xml is only a fallback now.
+        else -> sampledColor ?: context.getColor(R.color.story_row_cover)
+    }
 }
